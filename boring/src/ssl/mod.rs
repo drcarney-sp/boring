@@ -73,7 +73,7 @@ use std::mem::{self, ManuallyDrop};
 use std::ops::{Deref, DerefMut};
 use std::panic::resume_unwind;
 use std::path::Path;
-use std::ptr::{self, null_mut, NonNull};
+use std::ptr::{self, null, null_mut, NonNull};
 use std::slice;
 use std::str;
 use std::sync::{Arc, Mutex};
@@ -2147,6 +2147,20 @@ impl fmt::Debug for Ssl {
 }
 
 impl Ssl {
+    pub fn add_chrome_application_settings(&mut self) -> Result<(), ErrorStack> {
+        // SSL_add_application_settings(backend->handle, "h2", 2, NULL, 0);
+        unsafe {
+            cvt(ffi::SSL_add_application_settings(
+                self.as_ptr(),
+                b"h2".as_ptr(),
+                2,
+                null(),
+                0,
+            ))
+            .map(|_| ())
+        }
+    }
+
     /// Returns a new extra data index.
     ///
     /// Each invocation of this function is guaranteed to return a distinct index. These can be used
