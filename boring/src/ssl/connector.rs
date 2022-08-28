@@ -136,6 +136,10 @@ pub struct ConnectConfiguration {
 }
 
 impl ConnectConfiguration {
+    pub fn get_ssl(&mut self) -> &mut Ssl {
+        &mut self.ssl
+    }
+
     /// A builder-style version of `set_use_server_name_indication`.
     pub fn use_server_name_indication(mut self, use_sni: bool) -> ConnectConfiguration {
         self.set_use_server_name_indication(use_sni);
