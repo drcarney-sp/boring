@@ -1465,6 +1465,12 @@ impl SslContextBuilder {
         }
     }
 
+    pub fn set_cert_compression(&mut self) {
+        unsafe {
+            ffi::SSL_CTX_add_cert_compression_alg(self.as_ptr(), ffi::TLSEXT_cert_compression_brotli as _, None, None);
+        }
+    }
+
     /// Sets the extra data at the specified index.
     ///
     /// This can be used to provide data to callbacks registered with the context. Use the
