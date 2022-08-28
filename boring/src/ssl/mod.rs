@@ -223,6 +223,9 @@ bitflags! {
         ///
         /// Do not use this unless you know what you're doing!
         const SEND_FALLBACK_SCSV = ffi::SSL_MODE_SEND_FALLBACK_SCSV as _;
+
+        const CBC_RECORD_SPLITTING = ffi::SSL_MODE_CBC_RECORD_SPLITTING as _;
+        const ENABLE_FALSE_START = ffi::SSL_MODE_ENABLE_FALSE_START as _;
     }
 }
 
@@ -1473,19 +1476,24 @@ impl SslContextBuilder {
         in_: *const u8,
         in_len: usize,
     ) -> ::std::os::raw::c_int {
-        let data: *mut *mut u8 = null_mut();
-        let buff = ffi::CRYPTO_BUFFER_alloc(data, uncompressed_len);
+        let mut data: *mut u8 = null_mut();
+        let buff = ffi::CRYPTO_BUFFER_alloc(&mut data, uncompressed_len);
         if buff.is_null() {
             return 0;
         }
         let in_slice: &[u8] = std::slice::from_raw_parts(in_, in_len);
-        let mut decompressor = brotli::Decompressor::new(in_slice, 1024);
-        let out_slice = std::slice::from_raw_parts_mut(*data, uncompressed_len);
+        let mut decompressor = brotli::Decompressor::new(in_slice, 0);
+        let out_slice = std::slice::from_raw_parts_mut(data, uncompressed_len);
         let res = decompressor.read(out_slice);
         match res {
             Ok(output_size) => {
                 if output_size != uncompressed_len {
-                    // ffi::CRYPTO_BUFFER_
+                    log::error!(
+                        "error on brotli decompress size {} {}",
+                        output_size,
+                        uncompressed_len
+                    );
+                    ffi::CRYPTO_BUFFER_free(buff);
                     return 0;
                 }
                 *out = buff;
@@ -1493,6 +1501,7 @@ impl SslContextBuilder {
             }
             Err(e) => {
                 log::error!("error on brotli decompress {:?}", e);
+                ffi::CRYPTO_BUFFER_free(buff);
                 return 0;
             }
         }
