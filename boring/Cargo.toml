@@ -18,6 +18,9 @@ lazy_static = "1"
 libc = "0.2"
 boring-sys = { version = ">=1.1.0,<3.0.0", path = "../boring-sys" }
 
+brotli = "3.3.4"
+log = "0.4.17"
+
 [dev-dependencies]
 hex = "0.4"
 rusty-hook = "^0.11"

@@ -73,7 +73,7 @@ use std::mem::{self, ManuallyDrop};
 use std::ops::{Deref, DerefMut};
 use std::panic::resume_unwind;
 use std::path::Path;
-use std::ptr::{self, NonNull};
+use std::ptr::{self, null_mut, NonNull};
 use std::slice;
 use std::str;
 use std::sync::{Arc, Mutex};
@@ -1465,9 +1465,48 @@ impl SslContextBuilder {
         }
     }
 
-    pub fn set_cert_compression(&mut self) {
+    // copied from chrome source net/ssl/cert_compression.cc
+    unsafe extern "C" fn brotli_decompress(
+        _ssl: *mut ffi::SSL,
+        out: *mut *mut ffi::CRYPTO_BUFFER,
+        uncompressed_len: usize,
+        in_: *const u8,
+        in_len: usize,
+    ) -> ::std::os::raw::c_int {
+        let data: *mut *mut u8 = null_mut();
+        let buff = ffi::CRYPTO_BUFFER_alloc(data, uncompressed_len);
+        if buff.is_null() {
+            return 0;
+        }
+        let in_slice: &[u8] = std::slice::from_raw_parts(in_, in_len);
+        let mut decompressor = brotli::Decompressor::new(in_slice, 1024);
+        let out_slice = std::slice::from_raw_parts_mut(*data, uncompressed_len);
+        let res = decompressor.read(out_slice);
+        match res {
+            Ok(output_size) => {
+                if output_size != uncompressed_len {
+                    // ffi::CRYPTO_BUFFER_
+                    return 0;
+                }
+                *out = buff;
+                return 1;
+            }
+            Err(e) => {
+                log::error!("error on brotli decompress {:?}", e);
+                return 0;
+            }
+        }
+    }
+
+    pub fn set_cert_compression(&mut self) -> Result<(), ErrorStack> {
         unsafe {
-            ffi::SSL_CTX_add_cert_compression_alg(self.as_ptr(), ffi::TLSEXT_cert_compression_brotli as _, None, None);
+            cvt(ffi::SSL_CTX_add_cert_compression_alg(
+                self.as_ptr(),
+                ffi::TLSEXT_cert_compression_brotli as _,
+                None,
+                Some(Self::brotli_decompress),
+            ))
+            .map(|_| ())
         }
     }
 
