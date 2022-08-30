@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use crate::dh::Dh;
 use crate::error::ErrorStack;
@@ -210,7 +211,10 @@ impl DerefMut for ConnectConfiguration {
 /// OpenSSL's default configuration is highly insecure. This connector manages the OpenSSL
 /// structures, configuring cipher suites, session options, and more.
 #[derive(Clone)]
-pub struct SslAcceptor(SslContext);
+pub struct SslAcceptor(
+    SslContext,
+    Option<Arc<dyn Fn(&mut Ssl) -> Result<(), ErrorStack> + Sync + Send>>,
+);
 
 impl SslAcceptor {
     /// Creates a new builder configured to connect to non-legacy clients. This should generally be
@@ -286,7 +290,10 @@ impl SslAcceptor {
     where
         S: Read + Write,
     {
-        let ssl = Ssl::new(&self.0)?;
+        let mut ssl = Ssl::new(&self.0)?;
+        if let Some(callback) = self.1.clone() {
+            callback(&mut ssl)?;
+        }
         ssl.accept(stream)
     }
 
@@ -299,6 +306,13 @@ impl SslAcceptor {
     pub fn context(&self) -> &SslContextRef {
         &*self.0
     }
+
+    pub fn set_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(&mut Ssl) -> Result<(), ErrorStack> + 'static + Sync + Send,
+    {
+        self.1 = Some(Arc::new(callback));
+    }
 }
 
 /// A builder for `SslAcceptor`s.
@@ -307,7 +321,7 @@ pub struct SslAcceptorBuilder(SslContextBuilder);
 impl SslAcceptorBuilder {
     /// Consumes the builder, returning a `SslAcceptor`.
     pub fn build(self) -> SslAcceptor {
-        SslAcceptor(self.0.build())
+        SslAcceptor(self.0.build(), None)
     }
 }
 
