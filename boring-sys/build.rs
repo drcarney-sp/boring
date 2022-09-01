@@ -138,12 +138,12 @@ const BORING_SSL_PATH: &str = "deps/boringssl";
 /// Returns a new cmake::Config for building BoringSSL.
 ///
 /// It will add platform-specific parameters if needed.
-fn get_boringssl_cmake_config() -> cmake::Config {
+fn get_boringssl_cmake_config(boring_ssl_path: &str) -> cmake::Config {
     let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let pwd = std::env::current_dir().unwrap();
 
-    let mut boringssl_cmake = cmake::Config::new(BORING_SSL_PATH);
+    let mut boringssl_cmake = cmake::Config::new(boring_ssl_path);
 
     // Add platform-specific parameters.
     match os.as_ref() {
@@ -198,7 +198,7 @@ fn get_boringssl_cmake_config() -> cmake::Config {
             if arch == "x86" && os != "windows" {
                 boringssl_cmake.define(
                     "CMAKE_TOOLCHAIN_FILE",
-                    pwd.join(BORING_SSL_PATH)
+                    pwd.join(boring_ssl_path)
                         .join("src/util/32-bit-toolchain.cmake")
                         .as_os_str(),
                 );
@@ -306,10 +306,14 @@ fn get_extra_clang_args_for_bindgen() -> Vec<String> {
 
 fn main() {
     use std::env;
+    println!("cargo:rerun-if-env-changed=BORING_BSSL_SOURCE_PATH");
+    let boring_ssl_path =
+        std::env::var("BORING_BSSL_SOURCE_PATH").unwrap_or_else(|_| BORING_SSL_PATH.to_string());
 
     println!("cargo:rerun-if-env-changed=BORING_BSSL_PATH");
     let bssl_dir = std::env::var("BORING_BSSL_PATH").unwrap_or_else(|_| {
-        if !Path::new(BORING_SSL_PATH).join("CMakeLists.txt").exists() {
+
+        if !Path::new(&boring_ssl_path).join("CMakeLists.txt").exists() {
             println!("cargo:warning=fetching boringssl git submodule");
             // fetch the boringssl submodule
             let status = Command::new("git")
@@ -318,7 +322,7 @@ fn main() {
                     "update",
                     "--init",
                     "--recursive",
-                    BORING_SSL_PATH,
+                    &boring_ssl_path,
                 ])
                 .status();
             if !status.map_or(false, |status| status.success()) {
@@ -326,7 +330,7 @@ fn main() {
             }
         }
 
-        let mut cfg = get_boringssl_cmake_config();
+        let mut cfg = get_boringssl_cmake_config(&boring_ssl_path);
 
         if cfg!(feature = "fuzzing") {
             cfg.cxxflag("-DBORINGSSL_UNSAFE_DETERMINISTIC_MODE")
@@ -373,9 +377,9 @@ fn main() {
     println!("cargo:rerun-if-env-changed=BORING_BSSL_INCLUDE_PATH");
     let include_path = std::env::var("BORING_BSSL_INCLUDE_PATH").unwrap_or_else(|_| {
         if cfg!(feature = "fips") {
-            format!("{}/include", BORING_SSL_PATH)
+            format!("{}/include", boring_ssl_path)
         } else {
-            format!("{}/src/include", BORING_SSL_PATH)
+            format!("{}/src/include", boring_ssl_path)
         }
     });
 
